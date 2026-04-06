@@ -1,0 +1,24 @@
+{
+  "output_path": "output_mog",
+  "picamera": false,
+  "camera_src": 0,
+  "warmup_seconds": 2.0,
+  "bg_sub": "MOG2",
+  "resize_width": 500,
+  "erode": {
+    "kernel": [3, 3],
+    "iterations": 1
+  },
+  "dilate": {
+    "kernel": [7, 7],
+    "iterations": 2
+  },
+  "keyclipwriter_buffersize": 32,
+  "write_snaps": true,
+  "frames_between_snaps": 20,
+  "annotate": true,
+  "min_radius": 8,
+  "codec": "MJPG",
+  "fps": 20,
+  "display": true
+}
