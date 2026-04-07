@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paikallinen videon liikkeentunnistus</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.4; }
+    .row { display: flex; gap: 20px; flex-wrap: wrap; }
+    .panel { border: 1px solid #ccc; border-radius: 8px; padding: 16px; }
+    video, canvas { max-width: 100%; border: 1px solid #ccc; border-radius: 6px; }
+    label { display: block; margin-top: 10px; }
+    input[type=range] { width: 100%; }
+    ul { max-height: 240px; overflow: auto; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Paikallinen videon liikkeentunnistus</h1>
+  <p>Tämä sivu käsittelee valitsemasi videon selaimessa paikallisesti. Videota ei tarvitse lähettää palvelimelle.</p>
+
+  <div class="panel">
+    <label>Valitse video:
+      <input id="fileInput" type="file" accept="video/*">
+    </label>
+    <label>Liikekynnys (% muuttuneita pikseleitä):
+      <input id="threshold" type="range" min="0.2" max="20" step="0.1" value="2.5">
+      <span id="thresholdValue">2.5 %</span>
+    </label>
+    <label>Näyteväli (ms):
+      <input id="sampleMs" type="range" min="40" max="500" step="10" value="120">
+      <span id="sampleMsValue">120 ms</span>
+    </label>
+    <button id="analyzeBtn">Aloita analyysi</button>
+    <button id="stopBtn">Pysäytä</button>
+    <p id="status">Valitse ensin video.</p>
+  </div>
+
+  <div class="row">
+    <div class="panel" style="flex: 2 1 500px;">
+      <video id="video" controls muted></video>
+      <canvas id="viewCanvas"></canvas>
+      <canvas id="workCanvas" style="display:none;"></canvas>
+    </div>
+
+    <div class="panel" style="flex: 1 1 280px;">
+      <h3>Havaittu liike</h3>
+      <p>Nykyinen muutos: <strong id="motionPercent">0.00 %</strong></p>
+      <p>Analysoidut främet: <strong id="frameCount">0</strong></p>
+      <p>Liikettä sisältävät ajankohdat:</p>
+      <ul id="events"></ul>
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const video = document.getElementById('video');
+    const viewCanvas = document.getElementById('viewCanvas');
+    const workCanvas = document.getElementById('workCanvas');
+    const viewCtx = viewCanvas.getContext('2d');
+    const workCtx = workCanvas.getContext('2d', { willReadFrequently: true });
+    const statusEl = document.getElementById('status');
+    const motionPercentEl = document.getElementById('motionPercent');
+    const frameCountEl = document.getElementById('frameCount');
+    const eventsEl = document.getElementById('events');
+    const thresholdEl = document.getElementById('threshold');
+    const thresholdValueEl = document.getElementById('thresholdValue');
+    const sampleMsEl = document.getElementById('sampleMs');
+    const sampleMsValueEl = document.getElementById('sampleMsValue');
+
+    let timer = null;
+    let previousGray = null;
+    let frameCount = 0;
+    let lastEventSecond = -1;
+
+    thresholdEl.addEventListener('input', () => {
+      thresholdValueEl.textContent = `${thresholdEl.value} %`;
+    });
+
+    sampleMsEl.addEventListener('input', () => {
+      sampleMsValueEl.textContent = `${sampleMsEl.value} ms`;
+    });
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      video.src = url;
+      statusEl.textContent = `Valittu: ${file.name}`;
+      eventsEl.innerHTML = '';
+      motionPercentEl.textContent = '0.00 %';
+      frameCountEl.textContent = '0';
+      previousGray = null;
+      frameCount = 0;
+      lastEventSecond = -1;
+    });
+
+    function resetRun() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      previousGray = null;
+      frameCount = 0;
+      lastEventSecond = -1;
+      frameCountEl.textContent = '0';
+      motionPercentEl.textContent = '0.00 %';
+      eventsEl.innerHTML = '';
+    }
+
+    function formatTime(sec) {
+      const s = Math.floor(sec % 60).toString().padStart(2, '0');
+      const m = Math.floor((sec / 60) % 60).toString().padStart(2, '0');
+      const h = Math.floor(sec / 3600).toString().padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function addEvent(sec, percent) {
+      const li = document.createElement('li');
+      li.textContent = `${formatTime(sec)} — ${percent.toFixed(2)} % muutos`;
+      eventsEl.appendChild(li);
+    }
+
+    function processFrame() {
+      if (video.paused || video.ended || video.readyState < 2) return;
+
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) return;
+
+      if (viewCanvas.width !== w) {
+        viewCanvas.width = w;
+        viewCanvas.height = h;
+        workCanvas.width = w;
+        workCanvas.height = h;
+      }
+
+      viewCtx.drawImage(video, 0, 0, w, h);
+      workCtx.drawImage(video, 0, 0, w, h);
+      const image = workCtx.getImageData(0, 0, w, h);
+      const data = image.data;
+
+      const gray = new Uint8Array(w * h);
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        gray[p] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+      }
+
+      let changed = 0;
+      if (previousGray) {
+        for (let i = 0; i < gray.length; i++) {
+          if (Math.abs(gray[i] - previousGray[i]) > 25) changed++;
+        }
+      }
+
+      previousGray = gray;
+      frameCount += 1;
+      frameCountEl.textContent = String(frameCount);
+
+      const percent = previousGray ? (changed / gray.length) * 100 : 0;
+      motionPercentEl.textContent = `${percent.toFixed(2)} %`;
+
+      const threshold = parseFloat(thresholdEl.value);
+      const sec = Math.floor(video.currentTime);
+      if (percent >= threshold && sec !== lastEventSecond) {
+        addEvent(video.currentTime, percent);
+        lastEventSecond = sec;
+      }
+    }
+
+    analyzeBtn.addEventListener('click', async () => {
+      if (!video.src) {
+        statusEl.textContent = 'Valitse ensin video.';
+        return;
+      }
+
+      resetRun();
+      statusEl.textContent = 'Analyysi käynnissä...';
+      video.currentTime = 0;
+      await video.play();
+      timer = setInterval(() => {
+        processFrame();
+        if (video.ended) {
+          clearInterval(timer);
+          timer = null;
+          statusEl.textContent = 'Analyysi valmis.';
+        }
+      }, parseInt(sampleMsEl.value, 10));
+    });
+
+    stopBtn.addEventListener('click', () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+      video.pause();
+      statusEl.textContent = 'Analyysi pysäytetty.';
+    });
+  </script>
+</body>
+</html>
