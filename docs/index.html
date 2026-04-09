@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Linnun lennon tunnistus selaimessa + Python-backend</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f7;
+      --panel: #ffffff;
+      --border: #d5d5d5;
+      --muted: #555;
+      --accent: #1f6feb;
+      --danger: #b00020;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      line-height: 1.45;
+      background: var(--bg);
+      max-width: 1360px;
+    }
+    h1, h2, h3 { margin-top: 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 430px) minmax(420px, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      margin-top: 12px;
+      font-weight: 600;
+    }
+    input[type="text"], input[type="number"], input[type="file"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      margin-top: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    button {
+      border: none;
+      background: var(--accent);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 10px 8px 0 0;
+      font-weight: 600;
+    }
+    button.secondary { background: #6b7280; }
+    button.danger { background: var(--danger); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .muted { color: var(--muted); }
+    .stage-wrap {
+      position: relative;
+      width: fit-content;
+      max-width: 100%;
+      overflow: auto;
+      background: #000;
+      border-radius: 10px;
+    }
+    video, canvas {
+      display: block;
+      max-width: 100%;
+      border-radius: 10px;
+    }
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+    pre {
+      max-height: 320px;
+      overflow: auto;
+      background: #111;
+      color: #ddd;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    ul {
+      max-height: 260px;
+      overflow: auto;
+      padding-left: 20px;
+    }
+    li { margin-bottom: 8px; }
+    .stat {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .stat > div {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      background: rgba(127,127,127,0.04);
+    }
+    .small { font-size: 13px; }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      background: rgba(31,111,235,0.12);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      margin-left: 8px;
+    }
+    @media (max-width: 1000px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Linnun lennon tunnistus</h1>
+  <p>Tämä käyttöliittymä käyttää Python-backendiä. Voit ladata videon tai käyttää tietokoneen webkameraa. Backend palauttaa havaitun linnun rajauslaatikon pikselikoordinaatit.</p>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>Yhteys backendiin</h2>
+        <label for="apiBase">Backendin osoite</label>
+        <input id="apiBase" type="text" value="http://127.0.0.1:8000" spellcheck="false">
+        <p class="muted small">Jos ajat tämän GitHub Pagesissa, käytä HTTPS-backendiä. Paikallisessa ajossa localhost käy.</p>
+        <button id="healthBtn">Tarkista yhteys</button>
+        <span id="healthResult" class="pill">Ei tarkistettu</span>
+      </div>
+
+      <div class="panel">
+        <h2>Ladattu video</h2>
+        <label for="fileInput">Valitse videotiedosto</label>
+        <input id="fileInput" type="file" accept="video/*">
+
+        <label for="frameStep">Analysoi joka N:s frame</label>
+        <input id="frameStep" type="number" min="1" step="1" value="3">
+
+        <button id="analyzeVideoBtn">Analysoi ladattu video</button>
+        <button id="clearVideoBtn" class="secondary">Tyhjennä videotulokset</button>
+      </div>
+
+      <div class="panel">
+        <h2>Webkamera</h2>
+        <label for="sampleMs">Näyteväli millisekunteina</label>
+        <input id="sampleMs" type="number" min="80" step="10" value="250">
+        <button id="startCamBtn">Käynnistä webkamera</button>
+        <button id="stopCamBtn" class="danger">Pysäytä webkamera</button>
+        <p class="muted small">Webkamera vaatii selaimessa suojatun kontekstin eli HTTPS:n tai localhostin.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Tilanne</h2>
+        <p id="status">Valmis.</p>
+        <div class="stat">
+          <div><strong>Frame</strong><br><span id="frameInfo">-</span></div>
+          <div><strong>Havaintoja</strong><br><span id="detectionCount">0</span></div>
+          <div><strong>Motion gate</strong><br><span id="motionInfo">-</span></div>
+          <div><strong>Koko</strong><br><span id="sizeInfo">-</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Havaintolista</h2>
+        <ul id="eventList"></ul>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Kuva</h2>
+        <div class="stage-wrap">
+          <video id="video" controls autoplay muted playsinline></video>
+          <canvas id="overlay"></canvas>
+        </div>
+        <canvas id="workCanvas" style="display:none;"></canvas>
+      </div>
+
+      <div class="panel">
+        <h2>Raaka JSON-vastaus</h2>
+        <pre id="jsonOutput">{}</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const apiBaseEl = document.getElementById('apiBase');
+    const fileInput = document.getElementById('fileInput');
+    const frameStepEl = document.getElementById('frameStep');
+    const sampleMsEl = document.getElementById('sampleMs');
+    const healthBtn = document.getElementById('healthBtn');
+    const analyzeVideoBtn = document.getElementById('analyzeVideoBtn');
+    const clearVideoBtn = document.getElementById('clearVideoBtn');
+    const startCamBtn = document.getElementById('startCamBtn');
+    const stopCamBtn = document.getElementById('stopCamBtn');
+    const healthResult = document.getElementById('healthResult');
+    const statusEl = document.getElementById('status');
+    const frameInfoEl = document.getElementById('frameInfo');
+    const detectionCountEl = document.getElementById('detectionCount');
+    const motionInfoEl = document.getElementById('motionInfo');
+    const sizeInfoEl = document.getElementById('sizeInfo');
+    const eventListEl = document.getElementById('eventList');
+    const jsonOutput = document.getElementById('jsonOutput');
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const overlayCtx = overlay.getContext('2d');
+    const workCanvas = document.getElementById('workCanvas');
+    const workCtx = workCanvas.getContext('2d');
+
+    let stream = null;
+    let webcamTimer = null;
+    let uploadedMatches = [];
+    let latestVideoSummary = null;
+
+    function apiBase() {
+      return apiBaseEl.value.trim().replace(/\/$/, '');
+    }
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function setJson(data) {
+      jsonOutput.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function clearOverlay() {
+      overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+    }
+
+    function resizeCanvasToVideo() {
+      const w = video.videoWidth || 0;
+      const h = video.videoHeight || 0;
+      if (!w || !h) return;
+      overlay.width = w;
+      overlay.height = h;
+      workCanvas.width = w;
+      workCanvas.height = h;
+      sizeInfoEl.textContent = `${w} x ${h}`;
+    }
+
+    function drawDetections(detections = [], motionBoxes = []) {
+      clearOverlay();
+      overlayCtx.lineWidth = 2;
+      overlayCtx.font = '16px Arial';
+
+      for (const box of motionBoxes) {
+        overlayCtx.strokeStyle = 'orange';
+        overlayCtx.strokeRect(box.x, box.y, box.w, box.h);
+        overlayCtx.fillStyle = 'orange';
+        overlayCtx.fillText(`motion [${box.x},${box.y}]`, box.x, Math.max(18, box.y - 6));
+      }
+
+      for (const det of detections) {
+        overlayCtx.strokeStyle = 'lime';
+        overlayCtx.fillStyle = 'lime';
+        overlayCtx.strokeRect(det.x1, det.y1, det.x2 - det.x1, det.y2 - det.y1);
+        const text = `${det.label} ${det.confidence.toFixed(2)} [${det.x1},${det.y1}] - [${det.x2},${det.y2}]`;
+        overlayCtx.fillText(text, det.x1, Math.max(18, det.y1 - 6));
+      }
+    }
+
+    function formatSeconds(seconds) {
+      if (typeof seconds !== 'number' || Number.isNaN(seconds)) return '-';
+      const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+      const m = Math.floor((seconds / 60) % 60).toString().padStart(2, '0');
+      const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function renderEventList(items) {
+      eventListEl.innerHTML = '';
+      if (!items || !items.length) {
+        const li = document.createElement('li');
+        li.textContent = 'Ei havaintoja.';
+        eventListEl.appendChild(li);
+        return;
+      }
+
+      items.forEach((item) => {
+        const li = document.createElement('li');
+        const secText = item.time_sec == null ? '-' : formatSeconds(item.time_sec);
+        const coords = item.detections.map((d) => `[${d.x1},${d.y1}] - [${d.x2},${d.y2}]`).join(' | ');
+        li.textContent = `t=${secText}, frame=${item.frame_index ?? '-'} -> ${coords || 'havainto'}`;
+        li.style.cursor = 'pointer';
+        li.title = 'Siirry tähän kohtaan videossa';
+        li.addEventListener('click', () => {
+          if (typeof item.time_sec === 'number' && !Number.isNaN(item.time_sec)) {
+            video.currentTime = item.time_sec;
+            drawDetections(item.detections || [], item.motion_boxes || []);
+          }
+        });
+        eventListEl.appendChild(li);
+      });
+    }
+
+    function updateSummary(analysis) {
+      detectionCountEl.textContent = String((analysis.detections || []).length);
+      motionInfoEl.textContent = analysis.motion_detected ? 'liikettä havaittu' : 'ei liikettä';
+      if (analysis.frame_width && analysis.frame_height) {
+        sizeInfoEl.textContent = `${analysis.frame_width} x ${analysis.frame_height}`;
+      }
+    }
+
+    async function checkHealth() {
+      healthResult.textContent = 'Tarkistetaan...';
+      try {
+        const res = await fetch(`${apiBase()}/health`);
+        const data = await res.json();
+        healthResult.textContent = data.ok ? 'Yhteys OK' : 'Virhe';
+        setJson(data);
+      } catch (error) {
+        healthResult.textContent = 'Ei yhteyttä';
+        setJson({ error: String(error) });
+      }
+    }
+
+    function stopWebcamLoop() {
+      if (webcamTimer) {
+        clearInterval(webcamTimer);
+        webcamTimer = null;
+      }
+    }
+
+    function stopCamera() {
+      stopWebcamLoop();
+      if (stream) {
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
+        stream = null;
+      }
+      video.pause();
+      video.srcObject = null;
+      clearOverlay();
+      setStatus('Webkamera pysäytetty.');
+    }
+
+    async function startCamera() {
+      stopCamera();
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        uploadedMatches = [];
+        latestVideoSummary = null;
+        renderEventList([]);
+        video.src = '';
+        video.srcObject = stream;
+        await video.play();
+        resizeCanvasToVideo();
+        setStatus('Webkamera käynnissä. Lähetetään frameja backendille...');
+        webcamTimer = setInterval(sendCurrentFrameToBackend, parseInt(sampleMsEl.value, 10));
+      } catch (error) {
+        setStatus(`Webkamera ei käynnistynyt: ${error}`);
+        setJson({ error: String(error) });
+      }
+    }
+
+    async function sendCurrentFrameToBackend() {
+      if (!video.videoWidth || !video.videoHeight || !stream) {
+        return;
+      }
+
+      resizeCanvasToVideo();
+      workCtx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height);
+      const blob = await new Promise((resolve) => workCanvas.toBlob(resolve, 'image/jpeg', 0.9));
+      const formData = new FormData();
+      formData.append('file', blob, 'frame.jpg');
+
+      try {
+        const res = await fetch(`${apiBase()}/detect-frame`, { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+
+        setJson(data);
+        updateSummary(data);
+        frameInfoEl.textContent = 'live';
+        drawDetections(data.detections || [], data.motion_boxes || []);
+        renderEventList([{ frame_index: null, time_sec: null, motion_boxes: data.motion_boxes || [], detections: data.detections || [] }]);
+      } catch (error) {
+        setStatus(`Frame-lähetys epäonnistui: ${error}`);
+        setJson({ error: String(error) });
+      }
+    }
+
+    async function analyzeUploadedVideo() {
+      const file = fileInput.files[0];
+      if (!file) {
+        setStatus('Valitse ensin videotiedosto.');
+        return;
+      }
+
+      stopCamera();
+      uploadedMatches = [];
+      video.src = URL.createObjectURL(file);
+      video.srcObject = null;
+      await video.play().catch(() => {});
+      resizeCanvasToVideo();
+
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('frame_step', frameStepEl.value);
+
+      setStatus('Videota analysoidaan backendissa...');
+      frameInfoEl.textContent = '-';
+
+      try {
+        const res = await fetch(`${apiBase()}/detect-video?frame_step=${encodeURIComponent(frameStepEl.value)}`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+
+        latestVideoSummary = data;
+        uploadedMatches = data.matches || [];
+        setJson(data);
+        renderEventList(uploadedMatches);
+        detectionCountEl.textContent = String(uploadedMatches.reduce((sum, item) => sum + (item.detections || []).length, 0));
+        motionInfoEl.textContent = uploadedMatches.length ? 'havaintoja löytyi' : 'ei havaintoja';
+        frameInfoEl.textContent = `${data.processed_frames || 0} käsiteltyä framea`;
+        setStatus(`Analyysi valmis. Havaintoframeja: ${uploadedMatches.length}`);
+        syncOverlayToCurrentTime();
+      } catch (error) {
+        setStatus(`Videon analyysi epäonnistui: ${error}`);
+        setJson({ error: String(error) });
+      }
+    }
+
+    function syncOverlayToCurrentTime() {
+      if (!uploadedMatches.length || !video.duration) {
+        return;
+      }
+      const now = video.currentTime;
+      let nearest = null;
+      let bestDelta = Infinity;
+
+      for (const item of uploadedMatches) {
+        if (typeof item.time_sec !== 'number') continue;
+        const delta = Math.abs(item.time_sec - now);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          nearest = item;
+        }
+      }
+
+      if (nearest && bestDelta <= 0.6) {
+        drawDetections(nearest.detections || [], nearest.motion_boxes || []);
+        frameInfoEl.textContent = nearest.frame_index ?? '-';
+      } else {
+        clearOverlay();
+      }
+    }
+
+    function clearVideoResults() {
+      uploadedMatches = [];
+      latestVideoSummary = null;
+      renderEventList([]);
+      clearOverlay();
+      frameInfoEl.textContent = '-';
+      detectionCountEl.textContent = '0';
+      motionInfoEl.textContent = '-';
+      setJson({});
+      setStatus('Videotulokset tyhjennetty.');
+    }
+
+    video.addEventListener('loadedmetadata', resizeCanvasToVideo);
+    video.addEventListener('timeupdate', syncOverlayToCurrentTime);
+    healthBtn.addEventListener('click', checkHealth);
+    analyzeVideoBtn.addEventListener('click', analyzeUploadedVideo);
+    clearVideoBtn.addEventListener('click', clearVideoResults);
+    startCamBtn.addEventListener('click', startCamera);
+    stopCamBtn.addEventListener('click', stopCamera);
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      stopCamera();
+      uploadedMatches = [];
+      video.srcObject = null;
+      video.src = URL.createObjectURL(file);
+      await video.play().catch(() => {});
+      resizeCanvasToVideo();
+      setStatus(`Valittu video: ${file.name}`);
+    });
+  </script>
+</body>
+</html>
