@@ -1,6 +1,6 @@
 # capturing_frames-with_movement
 
-## Holistinen käyttöohje
+## Käyttöohje
 
 Tämä projekti on lintujen tai muun liikkeen havaitsemiseen tarkoitettu järjestelmä, jossa selainkäyttöliittymä ja Python-backend toimivat yhdessä.
 
