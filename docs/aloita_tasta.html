@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aloita tästä - linnun tunnistusohjelma</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      line-height: 1.55;
+      max-width: 980px;
+    }
+    h1, h2, h3 { margin-top: 0; }
+    .panel {
+      border: 1px solid #d5d5d5;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    code, pre {
+      font-family: Consolas, Monaco, monospace;
+    }
+    pre {
+      background: #111;
+      color: #eee;
+      padding: 14px;
+      border-radius: 10px;
+      overflow: auto;
+    }
+    a.button {
+      display: inline-block;
+      text-decoration: none;
+      background: #1f6feb;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      margin-right: 8px;
+      margin-top: 8px;
+    }
+    .muted { color: #555; }
+    ul li { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Aloita tästä</h1>
+  <p>Tämä ohje on kirjoitettu aloittelijalle. Se näyttää vaihe vaiheelta, miten ohjelma asennetaan omalle koneelle ja miten selainkäyttöliittymä käynnistetään komentoriviltä.</p>
+
+  <div class="panel">
+    <h2>Mitä tarvitset</h2>
+    <ul>
+      <li>Python 3.12</li>
+      <li>Git</li>
+      <li>internetyhteys ensimmäistä käynnistystä varten</li>
+      <li>webkamera tai videotiedosto</li>
+    </ul>
+    <p class="muted">Jos Python tai Git puuttuu, asenna ne ensin. Windowsissa on helpointa asentaa ne normaaleilla asennuspaketeilla. macOS:ssä ja Linuxissa ne voi asentaa myös paketinhallinnalla.</p>
+  </div>
+
+  <div class="panel">
+    <h2>1. Lataa projekti koneelle</h2>
+    <p>Avaa komentorivi tai terminaali ja suorita:</p>
+    <pre><code>git clone https://github.com/kopja3/capturing_frames-with_movement.git
+cd capturing_frames-with_movement
+git checkout master
+git pull origin master</code></pre>
+    <p>Kun tämä on valmis, olet projektin kansiossa.</p>
+  </div>
+
+  <div class="panel">
+    <h2>2. Luo Python-ympäristö ja asenna paketit</h2>
+    <h3>macOS ja Linux</h3>
+    <pre><code>python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install --force-reinstall "numpy&lt;2"
+python -m pip install -r requirements-web.txt</code></pre>
+
+    <h3>Windows PowerShell</h3>
+    <pre><code>py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install --force-reinstall "numpy&lt;2"
+python -m pip install -r requirements-web.txt</code></pre>
+
+    <p>Kun ympäristö on aktivoitu, komentorivillä näkyy yleensä <code>(.venv)</code>.</p>
+  </div>
+
+  <div class="panel">
+    <h2>3. Käynnistä Python-backendi</h2>
+    <p>Pidä tämä terminaali auki ja suorita projektikansiossa:</p>
+    <pre><code>uvicorn bird_backend_api_mask_stable:app --host 0.0.0.0 --port 8000</code></pre>
+    <p>Kun kaikki toimii, palvelin kuuntelee portissa 8000.</p>
+  </div>
+
+  <div class="panel">
+    <h2>4. Avaa toinen terminaali ja käynnistä selainkäyttöliittymä</h2>
+    <p>Avaa toinen komentorivi samaan projektikansioon ja suorita:</p>
+    <pre><code>python3 -m http.server 8081</code></pre>
+    <p>Jos käytät Windowsia eikä <code>python3</code> toimi, käytä:</p>
+    <pre><code>py -3 -m http.server 8081</code></pre>
+    <p>Tämä käynnistää paikallisen web-palvelimen. Sivu avautuu osoitteesta:</p>
+    <pre><code>http://localhost:8081/docs/index_mask_stable_camera_select.html</code></pre>
+  </div>
+
+  <div class="panel">
+    <h2>5. Avaa selain myös komentoriviltä</h2>
+    <p>Voit avata sivun automaattisesti suoraan komentoriviltä.</p>
+
+    <h3>Windows PowerShell</h3>
+    <pre><code>start http://localhost:8081/docs/index_mask_stable_camera_select.html</code></pre>
+
+    <h3>macOS</h3>
+    <pre><code>open http://localhost:8081/docs/index_mask_stable_camera_select.html</code></pre>
+
+    <h3>Linux</h3>
+    <pre><code>xdg-open http://localhost:8081/docs/index_mask_stable_camera_select.html</code></pre>
+  </div>
+
+  <div class="panel">
+    <h2>6. Tarkista yhteys sivulla</h2>
+    <ul>
+      <li>Jätä backend-osoitteeksi <code>http://127.0.0.1:8000</code></li>
+      <li>Paina <strong>Tarkista yhteys</strong></li>
+      <li>Jos yhteys toimii, voit käyttää ohjelmaa</li>
+    </ul>
+    <a class="button" href="./index_mask_stable_camera_select.html">Avaa ohjelma</a>
+  </div>
+
+  <div class="panel">
+    <h2>7. Käyttö</h2>
+    <h3>Videotiedosto</h3>
+    <ul>
+      <li>Valitse koneelta video</li>
+      <li>Paina <strong>Analysoi ladattu video</strong></li>
+    </ul>
+
+    <h3>USB-kamera tai webkamera</h3>
+    <ul>
+      <li>Paina <strong>Päivitä kameraluettelo</strong></li>
+      <li>Valitse haluamasi kamera listasta</li>
+      <li>Paina <strong>Käynnistä valittu kamera</strong></li>
+      <li>Anna selaimelle lupa käyttää kameraa</li>
+    </ul>
+  </div>
+
+  <div class="panel">
+    <h2>Yleisimmät ongelmat</h2>
+    <h3>404 File not found</h3>
+    <p>Et ole projektin oikeassa kansiossa tai paikallinen kopio ei ole ajan tasalla. Suorita:</p>
+    <pre><code>git pull origin master
+ls docs</code></pre>
+
+    <h3>Backendiin ei saada yhteyttä</h3>
+    <p>Varmista, että <code>uvicorn</code> on käynnissä portissa 8000 ja että sivulla backend-osoite on <code>http://127.0.0.1:8000</code>.</p>
+
+    <h3>Kamera ei käynnisty</h3>
+    <p>Varmista, että avasit sivun osoitteesta <code>localhost</code> ja annoit selaimelle kameran käyttöluvan.</p>
+
+    <h3>Portti on jo käytössä</h3>
+    <p>Voit vaihtaa web-sivun portin esimerkiksi näin:</p>
+    <pre><code>python3 -m http.server 8090</code></pre>
+    <p>Silloin osoite on:</p>
+    <pre><code>http://localhost:8090/docs/index_mask_stable_camera_select.html</code></pre>
+  </div>
+
+  <div class="panel">
+    <h2>Sulkeminen</h2>
+    <p>Kun lopetat käytön, pysäytä molemmat terminaalit näppäimillä <code>Ctrl-C</code>.</p>
+  </div>
+</body>
+</html>
